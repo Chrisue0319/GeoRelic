@@ -1,0 +1,40 @@
+# === 本地原始数据与课程模板文件 ===
+*.pdf
+*.docx
+*.xlsx
+*.rar
+*.zip
+*.kmz
+
+# 全国文保单位原始数据目录
+全国文保单位/
+
+# === 开发工具与编辑器 ===
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === Office/LibreOffice 锁文件 ===
+.~lock.*
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv/
+venv/
+
+# === Node.js ===
+node_modules/
+dist/
+build/
+
+# === 日志与临时文件 ===
+*.log
+*.tmp
+.DS_Store
