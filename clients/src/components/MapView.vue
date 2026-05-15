@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import SimpleGlobe from './SimpleGlobe.vue';
 import { amapConfig } from '../config/mapConfig';
 import { loadAmap } from '../services/amapLoader';
@@ -92,7 +92,7 @@ function initMap() {
       return;
     }
 
-    if (map.getZoom() <= 3) {
+    if (map.getZoom() <= 4) {
       switchView('globe');
     }
   });
@@ -111,29 +111,36 @@ function switchView(view, centerOverride) {
     syncGlobeCenterFromMap();
   }
 
+  if (view === 'map' && map) {
+    suppressGlobeSwitch = true;
+    window.clearTimeout(suppressGlobeSwitchTimer);
+    const nextCenter = [
+      globeCenter.value.longitude,
+      clamp(globeCenter.value.latitude, -84, 84),
+    ];
+
+    map.resize();
+    map.setStatus({ animateEnable: false });
+    map.setZoomAndCenter(4, nextCenter, true);
+
+    requestAnimationFrame(() => {
+      startViewTransition(view);
+      map.once('zoomend', releaseGlobeSwitchSuppression);
+      suppressGlobeSwitchTimer = window.setTimeout(releaseGlobeSwitchSuppression, 900);
+    });
+
+    return;
+  }
+
+  startViewTransition(view);
+}
+
+function startViewTransition(view) {
   viewTransitioning.value = true;
   activeView.value = view;
   window.setTimeout(() => {
     viewTransitioning.value = false;
   }, 260);
-
-  if (view === 'map' && map) {
-    suppressGlobeSwitch = true;
-    window.clearTimeout(suppressGlobeSwitchTimer);
-    nextTick(() => {
-      requestAnimationFrame(() => {
-        const nextCenter = [
-          globeCenter.value.longitude,
-          clamp(globeCenter.value.latitude, -84, 84),
-        ];
-
-        map.resize();
-        map.setZoomAndCenter(4, nextCenter, false);
-        map.once('zoomend', releaseGlobeSwitchSuppression);
-        suppressGlobeSwitchTimer = window.setTimeout(releaseGlobeSwitchSuppression, 900);
-      });
-    });
-  }
 }
 
 function syncGlobeCenterFromMap() {
@@ -155,6 +162,10 @@ function updateGlobeCenter(center) {
 function releaseGlobeSwitchSuppression() {
   window.clearTimeout(suppressGlobeSwitchTimer);
   suppressGlobeSwitch = false;
+
+  if (map) {
+    map.setStatus({ animateEnable: true });
+  }
 }
 
 function clamp(value, min, max) {
@@ -266,19 +277,23 @@ function escapeHtml(value) {
       </ul>
     </aside>
 
-    <div class="map-stage" :class="{ transitioning: viewTransitioning }">
+    <div
+      class="map-stage"
+      :class="{
+        transitioning: viewTransitioning,
+      }"
+    >
       <div
         ref="mapContainer"
         class="map-container view-layer"
         :class="{ active: activeView === 'map' }"
       />
       <div
-        v-show="activeView === 'globe'"
         class="view-layer"
         :class="{ active: activeView === 'globe' }"
       >
         <SimpleGlobe
-          :active="activeView === 'globe'"
+          :active="activeView === 'globe' || viewTransitioning"
           :center="globeCenter"
           @center-change="updateGlobeCenter"
           @zoom-in="switchView('map', $event)"
@@ -424,6 +439,7 @@ function escapeHtml(value) {
   position: relative;
   min-height: 560px;
   overflow: hidden;
+  background: #101827;
 }
 
 .map-container {
@@ -441,12 +457,13 @@ function escapeHtml(value) {
   opacity: 0;
   pointer-events: none;
   transition: opacity 240ms ease;
+  z-index: 1;
 }
 
 .view-layer.active {
   opacity: 1;
   pointer-events: auto;
-  z-index: 1;
+  z-index: 2;
 }
 
 .map-stage.transitioning .view-layer {
