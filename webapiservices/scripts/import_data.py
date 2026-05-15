@@ -19,6 +19,8 @@ def import_data(excel_path: str, db: Session):
 
     count = 0
     for _, row in df.iterrows():
+        lon = float(row["lon"]) if pd.notna(row.get("lon")) else None
+        lat = float(row["lat"]) if pd.notna(row.get("lat")) else None
         poi = POI(
             code=int(row["code"]) if pd.notna(row.get("code")) else None,
             class_code=str(row["classCode"]) if pd.notna(row.get("classCode")) else None,
@@ -30,9 +32,11 @@ def import_data(excel_path: str, db: Session):
             remark=str(row["remark"]) if pd.notna(row.get("remark")) else None,
             bd_lon=float(row["bd_lon"]) if pd.notna(row.get("bd_lon")) else None,
             bd_lat=float(row["bd_lat"]) if pd.notna(row.get("bd_lat")) else None,
-            lon=float(row["lon"]) if pd.notna(row.get("lon")) else None,
-            lat=float(row["lat"]) if pd.notna(row.get("lat")) else None,
+            lon=lon,
+            lat=lat,
         )
+        if lon is not None and lat is not None:
+            poi.geom = f"SRID=4326;POINT({lon} {lat})"
         db.add(poi)
         count += 1
         if count % 100 == 0:

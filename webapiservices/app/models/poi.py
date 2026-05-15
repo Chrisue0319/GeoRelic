@@ -1,5 +1,6 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime
+from geoalchemy2 import Geometry
 from app.database import Base
 
 
@@ -19,6 +20,7 @@ class POI(Base):
     bd_lat = Column(Float)
     lon = Column(Float, index=True)
     lat = Column(Float, index=True)
+    geom = Column(Geometry("POINT", srid=4326), nullable=True)
     image_url = Column(String(500), nullable=True)
     website = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

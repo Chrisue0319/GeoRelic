@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -6,6 +6,7 @@ from app.deps import get_current_user
 from app.models.user import User
 from app.schemas.user import User as UserSchema, UserUpdate
 from app.utils.security import generate_api_key, get_password_hash
+from app.utils.exceptions import AuthException, ErrorCode
 
 router = APIRouter(prefix="/users", tags=["用户"])
 
@@ -24,7 +25,12 @@ def update_user_me(
     if user_in.email is not None:
         existing = db.query(User).filter(User.email == user_in.email, User.id != current_user.id).first()
         if existing:
-            raise HTTPException(status_code=400, detail="Email already in use")
+            raise AuthException(
+                error_code=ErrorCode.AUTH_EMAIL_EXISTS[0],
+                error_desc=ErrorCode.AUTH_EMAIL_EXISTS[1],
+                status_code=status.HTTP_400_BAD_REQUEST,
+                debug_info=f"Email '{user_in.email}' is already in use by another user",
+            )
         current_user.email = user_in.email
     if user_in.full_name is not None:
         current_user.full_name = user_in.full_name

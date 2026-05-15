@@ -1,12 +1,13 @@
 import math
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user, get_current_admin, get_current_user_or_api_key
+from app.deps import get_current_user, get_current_admin, get_current_user_or_api_key, rate_limit_read, rate_limit_write
 from app.models.poi import POI
 from app.models.user import User
 from app.schemas.poi import POI as POISchema, POICreate, POIUpdate
+from app.utils.exceptions import POIException, ErrorCode
 
 router = APIRouter(prefix="/pois", tags=["POI"])
 
@@ -65,6 +66,7 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 def list_poi_types(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_or_api_key),
+    _rate_limit=Depends(rate_limit_read),
 ):
     types = db.query(POI.type).distinct().all()
     return [t[0] for t in types if t[0]]
@@ -74,6 +76,7 @@ def list_poi_types(
 def list_poi_batches(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_or_api_key),
+    _rate_limit=Depends(rate_limit_read),
 ):
     batches = db.query(POI.batch).distinct().all()
     return [b[0] for b in batches if b[0]]
@@ -98,6 +101,7 @@ def list_pois(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_or_api_key),
+    _rate_limit=Depends(rate_limit_read),
 ):
     query = _build_query(db, name, province, poi_type, batch, min_lon, max_lon, min_lat, max_lat, has_image, has_website)
     pois = query.offset(skip).limit(limit).all()
@@ -117,10 +121,16 @@ def get_poi(
     poi_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_or_api_key),
+    _rate_limit=Depends(rate_limit_read),
 ):
     poi = db.query(POI).filter(POI.id == poi_id).first()
     if not poi:
-        raise HTTPException(status_code=404, detail="POI not found")
+        raise POIException(
+            error_code=ErrorCode.POI_NOT_FOUND[0],
+            error_desc=ErrorCode.POI_NOT_FOUND[1],
+            status_code=status.HTTP_404_NOT_FOUND,
+            debug_info=f"POI with id={poi_id} does not exist",
+        )
     return poi
 
 
@@ -129,6 +139,7 @@ def create_poi(
     poi_in: POICreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
+    _rate_limit=Depends(rate_limit_write),
 ):
     poi = POI(**poi_in.model_dump())
     db.add(poi)
@@ -143,10 +154,16 @@ def update_poi(
     poi_in: POIUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
+    _rate_limit=Depends(rate_limit_write),
 ):
     poi = db.query(POI).filter(POI.id == poi_id).first()
     if not poi:
-        raise HTTPException(status_code=404, detail="POI not found")
+        raise POIException(
+            error_code=ErrorCode.POI_NOT_FOUND[0],
+            error_desc=ErrorCode.POI_NOT_FOUND[1],
+            status_code=status.HTTP_404_NOT_FOUND,
+            debug_info=f"POI with id={poi_id} does not exist",
+        )
     update_data = poi_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(poi, field, value)
@@ -160,10 +177,16 @@ def delete_poi(
     poi_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
+    _rate_limit=Depends(rate_limit_write),
 ):
     poi = db.query(POI).filter(POI.id == poi_id).first()
     if not poi:
-        raise HTTPException(status_code=404, detail="POI not found")
+        raise POIException(
+            error_code=ErrorCode.POI_NOT_FOUND[0],
+            error_desc=ErrorCode.POI_NOT_FOUND[1],
+            status_code=status.HTTP_404_NOT_FOUND,
+            debug_info=f"POI with id={poi_id} does not exist",
+        )
     db.delete(poi)
     db.commit()
     return None
