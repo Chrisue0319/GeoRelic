@@ -1,6 +1,7 @@
-import math
 from fastapi import APIRouter, Depends, status, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
+from geoalchemy2 import Geography
 
 from app.database import get_db
 from app.deps import get_current_user, get_current_admin, get_current_user_or_api_key, rate_limit_read, rate_limit_write
@@ -22,6 +23,9 @@ def _build_query(
     max_lon: float | None,
     min_lat: float | None,
     max_lat: float | None,
+    center_lon: float | None,
+    center_lat: float | None,
+    radius_km: float | None,
     has_image: bool | None,
     has_website: bool | None,
 ):
@@ -42,6 +46,15 @@ def _build_query(
         query = query.filter(POI.lat >= min_lat)
     if max_lat is not None:
         query = query.filter(POI.lat <= max_lat)
+    if center_lon is not None and center_lat is not None and radius_km is not None:
+        point = f"SRID=4326;POINT({center_lon} {center_lat})"
+        query = query.filter(
+            func.ST_DWithin(
+                POI.geom.cast(Geography),
+                func.ST_GeogFromText(point),
+                radius_km * 1000,
+            )
+        )
     if has_image is True:
         query = query.filter(POI.image_url.isnot(None))
     if has_image is False:
@@ -51,15 +64,6 @@ def _build_query(
     if has_website is False:
         query = query.filter(POI.website.is_(None))
     return query
-
-
-def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6371
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 @router.get("/types/list")
@@ -103,16 +107,11 @@ def list_pois(
     current_user: User = Depends(get_current_user_or_api_key),
     _rate_limit=Depends(rate_limit_read),
 ):
-    query = _build_query(db, name, province, poi_type, batch, min_lon, max_lon, min_lat, max_lat, has_image, has_website)
+    query = _build_query(
+        db, name, province, poi_type, batch, min_lon, max_lon, min_lat, max_lat,
+        center_lon, center_lat, radius_km, has_image, has_website,
+    )
     pois = query.offset(skip).limit(limit).all()
-    if center_lat is not None and center_lon is not None and radius_km is not None:
-        filtered = []
-        for poi in pois:
-            if poi.lat is not None and poi.lon is not None:
-                d = _haversine_distance(center_lat, center_lon, poi.lat, poi.lon)
-                if d <= radius_km:
-                    filtered.append(poi)
-        return filtered
     return pois
 
 

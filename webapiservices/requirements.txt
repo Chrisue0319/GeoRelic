@@ -15,3 +15,4 @@ alembic==1.14.0
 psycopg2-binary==2.9.10
 geoalchemy2==0.16.0
 shapely==2.0.6
+pytest==8.3.3
